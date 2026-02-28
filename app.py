@@ -143,31 +143,28 @@ for sid, cls, name, _ in rows:
     st.divider()
 
 # Save button
+# Save button
 if st.button("💾 حفظ الحضور"):
     con = sqlite3.connect(DB)
     cur = con.cursor()
-   for sid, _, _, _ in rows:
-    st_code = st.session_state[key].get(str(sid), "A")
-    cur.execute("""
-        INSERT INTO att(student_id, day, status) VALUES(?,?,?)
-        ON CONFLICT(student_id, day) DO UPDATE SET status=excluded.status
-    """, (int(sid), day_str, st_code))
 
-con.commit()
-con.close()
+    for sid, _, _, _ in rows:
+        st_code = st.session_state[key].get(str(sid), "A")
+        cur.execute("""
+            INSERT INTO att(student_id, day, status) VALUES(?,?,?)
+            ON CONFLICT(student_id, day) DO UPDATE SET status=excluded.status
+        """, (int(sid), day_str, st_code))
 
-# ===== بعد انتهاء الحلقة =====
-sheet = get_gsheet()
+    con.commit()
+    con.close()
 
-for sid, _, _, _ in rows:
-    st_code = st.session_state[key].get(str(sid), "A")
-    sheet.append_row([
-        sid,
-        day_str,
-        st_code
-    ])
+    # ===== Google Sheets =====
+    sheet = get_gsheet()
+    for sid, _, _, _ in rows:
+        st_code = st.session_state[key].get(str(sid), "A")
+        sheet.append_row([sid, day_str, st_code])
 
-st.success("تم حفظ الحضور ✅")
+    st.success("تم حفظ الحضور ✅")
 
 # Export cumulative CSV
 st.subheader("3) تصدير (ملف واحد يتراكم)")
@@ -197,3 +194,4 @@ if st.button("⬇️ تصدير وإضافة على نفس الملف"):
                 w.writerow([day_str, cls, name, "حاضر" if st_code == "P" else "غائب"])
 
         st.success(f"تم التصدير ✅ إلى: {os.path.abspath(p)}")
+
