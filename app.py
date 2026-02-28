@@ -3,8 +3,23 @@ import sqlite3, csv, os
 from datetime import date
 from calendar import monthrange
 
+import json
+import gspread
+from google.oauth2.service_account import Credentials
 DB, PATH_FILE = "attendance.db", "export_path.txt"
+# ===== Google Sheets setup =====
+def get_gsheet():
+    scope = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive",
+    ]
 
+    sa_info = json.loads(st.secrets["SERVICE_ACCOUNT_JSON"])
+    creds = Credentials.from_service_account_info(sa_info, scopes=scope)
+
+    client = gspread.authorize(creds)
+    sh = client.open_by_key(st.secrets["SPREADSHEET_ID"])
+    return sh.sheet1
 def q(sql, p=(), fetch=False):
     con = sqlite3.connect(DB)
     cur = con.cursor()
@@ -131,15 +146,28 @@ for sid, cls, name, _ in rows:
 if st.button("💾 حفظ الحضور"):
     con = sqlite3.connect(DB)
     cur = con.cursor()
-    for sid, _, _, _ in rows:
-        st_code = st.session_state[key].get(str(sid), "A")
-        cur.execute("""
-            INSERT INTO att(student_id, day, status) VALUES(?,?,?)
-            ON CONFLICT(student_id, day) DO UPDATE SET status=excluded.status
-        """, (int(sid), day_str, st_code))
-    con.commit()
-    con.close()
-    st.success("تم حفظ الحضور ✅")
+   for sid, _, _, _ in rows:
+    st_code = st.session_state[key].get(str(sid), "A")
+    cur.execute("""
+        INSERT INTO att(student_id, day, status) VALUES(?,?,?)
+        ON CONFLICT(student_id, day) DO UPDATE SET status=excluded.status
+    """, (int(sid), day_str, st_code))
+
+con.commit()
+con.close()
+
+# ===== بعد انتهاء الحلقة =====
+sheet = get_gsheet()
+
+for sid, _, _, _ in rows:
+    st_code = st.session_state[key].get(str(sid), "A")
+    sheet.append_row([
+        sid,
+        day_str,
+        st_code
+    ])
+
+st.success("تم حفظ الحضور ✅")
 
 # Export cumulative CSV
 st.subheader("3) تصدير (ملف واحد يتراكم)")
@@ -167,4 +195,5 @@ if st.button("⬇️ تصدير وإضافة على نفس الملف"):
             for sid, cls, name, _ in rows:
                 st_code = st.session_state[key].get(str(sid), "A")
                 w.writerow([day_str, cls, name, "حاضر" if st_code == "P" else "غائب"])
+
         st.success(f"تم التصدير ✅ إلى: {os.path.abspath(p)}")
